@@ -1,0 +1,40 @@
+help：查看帮助
+ATWA：激活当前AP
+ATWB：激活STA+AP模式
+ATWD：从一个网络连接中断开
+ATWE：开启web服务
+ATWI：后面加ip地址可以进行ping测试
+ATWL：作为ssl客户端
+ATWM：设置为Wlan混杂模式
+ATWP：on(1：开启wifi)，off（0：关闭wifi）(包括DHCP服务等同时控制)
+ATWQ：wifi的simple模式配置
+ATWS：扫面周边ssid
+ATWZ：设置要连接的SSID
+ATWZ=read_mac:读取设备mac
+ATWZ=write_mac：设置设备mac
+============================================================
+============================================================
+1、连接到上层路由运行于AP模式
+	ATW0：上层路由的ssid
+	ATW1：上层路由ssid的密码
+	ATW2：设置Key ID
+	ATWC：连接到这上级路由
+2、添加RTL8771AF设备的无线ssid（设置AP模式）
+	ATW3：SSID名字
+	ATW4：SSID密码
+	ATW5：设置SSID的信道
+	ATWA：激活当前的设备发射的无线（改为ATWB设置AP+STA模式）
+	
+==============================================================
+web服务
+	1、开启web server
+		web server只能在WIFI切换至AP模式或者并发的AP模式
+		AP mode：192.168.1.168
+		concurrent AP mode：192.168.43.1
+	
+	AP模式下的web server
+	1、web服务只支持IE8和chrome浏览器
+	2、在工程中将CONFIG_WEB_SERVER设置为1
+	3、编译工程至开发板，ATWE：开启webserver
+
+	

@@ -1,0 +1,400 @@
+=========================================================================================
+FreeRTOS与uCOS II比较
+牛逼的地方：
+	1、内核ROM和RAM消耗都比uCOS小，特别是RAM，uCOS至少需要5K以上，freeOS2~3K也能跑的很好
+	2、FreeRTOS各进程之间可以共用stack（栈）空间，与uCOS II不同（每个进程拥有自己独立的stack空间）
+	3、freeRTOS可以优先调度优先级一样的任务，这些任务是按时间片来轮流处理，uCOS每个任务都有独一无二
+	的优先级，理论上freeRTOS可以管理超过64个任务，而uCOS只能管理64个（uCOS II可以管理256个）
+	4、freeRTOS在商业上是免费应用，而uCOS在商业上是要付钱的
+劣势的地方：
+	1、比uCOS简单，任务间通讯freeRTOS只支持Queque，Semaphores，Mutex。uCOS除这些之外还支持Flag，Mailbox
+	2、uCOS的支持比freeRTOS多。除操作系统外，freeRTOS只支持TCP/IP，uCOS则有大量外延支持，比如FS,USB,GUI,CAN等
+	3、uCOS可靠性更高，而且耐优化，freeRTOS在设置成中等优化的时候，就会出问题
+==========================================================================================
+FreeRTOS免费开源实时操作系统
+	1、FreeRTOS有3个文件：schedule调度文件，queue队列文件，task文件，这三个文件实现了
+		1、优先级调度，相同优先级任务轮转调度，同时可以设置成可剥夺内核或不可剥夺内核
+		2、消息队列
+		3、信号量
+		4、提供时间管理函数
+		5、内存管理
+	2、FreeRTOS设置成可剥夺内核时，保证实时性的要求，设置为不可剥夺内核时，提高CPU运行效率
+==========================================================================================
+1、任务管理
+	1、需要掌握
+		1、在应用程序中， FreeRTOS 如何为各任务分配处理时间。
+	?  2、在任意给定时刻， FreeRTOS 如何选择任务投入运行。
+	?  3、任务优先级如何影响系统行为。
+	?  4、任务存在哪些状态
+		5、如何实现一个任务。
+	? 	6、如何创建一个或多个任务的实例。
+	? 	7、如何使用任务参数。
+	? 	8、如何改变一个已创建任务的优先级。
+	? 	9、如何删除任务。
+	? 	10、如何实现周期性处理。
+	? 	11、空闲任务何时运行，可以用来干什么
+	2、任务函数
+		void ATaskFunction( void *pvParameters );
+			1、必须返回void并且有一个（void *）的参数
+			2、必须是死循环、不能从任务函数中返回，也不能执行到任务函数末尾
+			3、如果一个任务不再需要，可以显示的把它删除
+			4、一个任务函数可以用来创建若干个任务，创建出来的任务都是独立的执行实例，拥有属于自己的栈空间，以及属于自己的自动变量（栈变量），即任务本身自定义的变量
+			5、实例
+			void ATaskFunction( void *pvParameters )
+			{
+				/* 可以像普通函数一样定义变量。用这个函数创建的每个任务实例都有一个属于自己的iVarialbleExample变
+				量。但如果iVariableExample被定义为static，这一点则不成立 – 这种情况下只存在一个变量，所有的任务实
+				例将会共享这个变量。 */
+				int iVariableExample = 0;
+				
+				/* 任务通常实现在一个死循环中。 */
+				for( ;; )
+				{
+					/* 完成任务功能的代码将放在这里。 */
+				}
+				
+				/* 如果任务的具体实现会跳出上面的死循环，则此任务必须在函数运行完之前删除。传入NULL参数表示删除
+				的是当前任务 */
+				vTaskDelete( NULL );
+			}
+	3、顶层任务状态
+		一个任务可以有一个或两个状态，即运行状态和非运行状态，非运行状态又可分为若干个子状态
+	4、创建任务
+		portBASE_TYPE xTaskCreate(	pdTASK_CODE pvTaskCode,
+									const signed portCHAR * const pcName,
+									unsigned portSHORT usStackDepth,
+									void *pvParameters,
+									unsigned portBASE_TYPE uxPriority,
+									xTaskHandle *pxCreatedTask
+								);
+		@1：指向任务实现函数的函数指针（即函数名）
+		@2：任务描述，起辅助调试
+			应用程序可以通过定义常量 config_MAX_TASK_NAME_LEN 来定义任务名的最大长度——包括’\0’结束符。如果传入的字符串长度超过了这个最大值，字符串将会自动被截断。
+		@3：告诉内核为每隔任务分配多大的栈空间，单位是字，32位宽的栈空间，传入100，将会分配400字节的栈空间，大小不能超过size_t类型
+			configMINIMAL_STACK_SIZE：定义空闲任务用的栈空间大小
+		@4：任务函数的参数
+		@5：任务执行的优先级，0~(configMAX_PRIORITIES – 1)，如果 uxPriority 的值超过了(configMAX_PRIORITIES – 1)，将会导致实际赋给任务的优先级被自动封顶到最大合法值
+		@6：传出任务的句柄，在应用程序中可以用这个句柄来改变任务优先级，删除任务等
+		返回值：
+			1、pdTRUE
+				任务创建成功
+			2、errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY
+				由于内存堆空间不足，Freertos无法分配足够的空间来保存任务结构数据和任务栈，因此无法创建任务
+	5、vTaskStartScheduler()：启动调度器
+		只有启动调度器之后才能执行任务
+	6、优先级
+		1、 vTaskPrioritySet()设定优先级
+		2、FreeRTOS可以指定最大优先级数目（一般尽可能小一点）
+		3、相同优先级的按时间片来执行，任务调度器需要在每隔时间片结束时刻运行自己本身，
+			一个称为心跳（tick，有些地方称为时钟滴答）中断的周期性中断用于此目的。时间
+			片的长度通过心跳中断的频率进行设定，心跳中断频率FreeRTOSConfig.h 中的编译
+			时配置常量 configTICK_RATE_HZ 进行配置，tick count表示从调度器启动开始，心跳
+			中断的总数
+	7、扩充非运行状态
+		1、如果优先级高的任务一直处于运行状态会饿死处于低优先级的任务，所以低优先级的任务需要驱动
+		2、如果一个任务正在等待某个事件，则这个任务处于阻塞态（blocked），是非运行状态的一个子状态
+			任务可以进入阻塞状态以等待一下两种不同的类型的事件
+				1、定时事件：延迟或设定绝对时间，比如某个任务进入阻塞态延迟10ms
+				2、同步事件（阻塞状态）：源于其他任务或中断的事件。比如某个任务可以进入阻塞态以等待队列中有数据出来。同步事件囊括了所有板级范围内的事件硬件
+				3、挂起状态（suspended）：非运行状态的子状态。处于挂起状态的任务对调度器而言是不可见的
+					1、vTaskSuspend() API 函数是让任务进入挂起状态的唯一途径
+					2、vTaskResume() 或vTaskResumeFromISR() API函数是唤醒挂起任务的唯一途径
+				4、就绪状态
+					如果一个任务处于非运行状态，既没有挂起也没有阻塞，则这个任务处于就绪状态
+	8、用延迟函数来代替死循环
+		void vTaskDelay( portTickType xTicksToDelay);
+			@1：延迟多少个心跳周期，调用该延迟函数的任务将进入则色状态，经延迟指定的心跳周期数后，再转移到就绪状态
+			常数 portTICK_RATE_MS 可以用来将以毫秒为单位的时间值转换为以心跳周期为单位的时间值。
+			空闲任务(idle)是调度器启动时自动创建的,当任务进入阻塞状态而且没有其他任务处于就绪状态，将会执行空闲任务，降低cpu负载
+		void vTaskDelayUntil( portTickType * pxPreviousWakeTime, portTickType xTimeIncrement );
+			介绍：指定任务离开阻塞状态进入就绪状态那一刻的精确心跳计数值（绝对时间，可以实现固定执行周期的需求）
+			@1：记录上一次离开阻塞态（被唤醒）的时刻，这个时刻作为参考点来计算下一次离开阻塞态的时刻
+				它的值会在vTaskDelayUntil调用过程中自动更新，应用程序除了该变量第一次初始化外，都不需要修改它的值
+			@2：指定频率，单位是心跳周期，常量portTICK_RATE_MS将毫秒转换为心跳周期
+			xTaskGetTickCount()：获取当前绝对时钟（滴答数）
+	9、空闲任务和空闲任务钩子函数
+		1、空闲任务拥有最低优先级（0）以保证不会妨碍具有更高优先级的应用任务进入运行状态
+		2、空闲任务钩子函数（回调函数），可以直接在空闲任务中添加应用程序相关的功能。空闲
+		任务钩子函数会被空闲任务每循环一次就自动调用一次
+		作用：
+			1、执行低优先级，后台或需要不同处理的功能代码
+			2、测试系统的空闲比例
+			3、将处理器配置到低功耗模式
+		实现限制：
+			1、不能阻塞或挂起。以任何方式阻塞空闲任务都可能导致没有任务能够进入运行状态
+			2、如果应用程序用到了 vTaskDelete() 函数，则空闲钩子函数必须能够尽快返回，因为
+			在任务呗删除后，空闲任务负责回收内核资源。如果空闲任务一直运行在钩子函数中，则无法
+			进行回收工作
+			3、空闲任务钩子函数必须使用以下函数名和函数原型
+			void vApplicationIdleHook( void);
+			4、FreeRTOSConfig.h 中的配置常量 configUSE_IDLE_HOOK 必须定义为 1，这样空闲任务
+			钩子函数才会被调用。
+	10、改变任务优先级
+		void vTaskPrioritySet( xTaskHandle pxTask, unsigned portBASE_TYPE uxNewPriority );
+			@1：被修改任务优先级的任务句柄，任务可以传入NULL值来修改自己的优先级
+			@2：目标任务的新优先级，如果大于(configMAX_PRIORITIES – 1)，则自动封顶为最大值
+		unsigned portBASE_TYPE uxTaskPriorityGet( xTaskHandle pxTask );
+			功能：查询任务优先级
+			@1：倍查询任务的句柄（目标任务），任务传入NULL查询自己的优先级
+			返回值：被查询任务的优先级
+	11、删除任务
+		1、任务函数vTaskDelete()可以删除自己或其他任务
+		2、任务删除后就不复存在，也不会再进入运行状态
+		3、空闲任务的责任是要讲分配给已删除任务的内存释放掉。因此，使用vTaskDelete()
+		函数的任务千万不能把空闲任务的执行时间饿死
+		说明：只有内核为任务分配的内存空间才会在任务呗删除后自动回收。任务自己占用的
+		内存或资源需要由应用程序自己显示的释放
+		void vTaskDelete( xTaskHandle pxTaskToDelete);
+		@1：删除任务的句柄
+	12、调度算法
+		优先级抢占式调度
+			处于就绪状态的最高优先级的任务总是会被执行
+		选择任务优先级
+			单调速率调度（Rate Monotonic Scheduling,RMS）是一种常用的优先级分配技术
+			根据任务周期性执行的速率来分配一个唯一的优先级。具有最高周期执行频率的任务
+			赋予最高优先级，具有最低周期执行频率的任务赋予最低优先级
+		协作式调度
+
+2、队列管理
+	1、概述
+		基于FreeRTOS的应用程序由一组独立的任务构成--每个任务都是具有独立权限的小程序。
+		这些独立的任务之间很可能会通过互相通信以提供有用的系统功能
+		FreeRTOS中所有的通信与同步机制都是基于队列实现的
+		
+		任务：
+		1、如何创建一个队列
+		2、队列如何管理其数据
+		3、如何向队列发送数据
+		4、如何从队列接收数据
+		5、队列阻塞是什么意思
+		6、往队列发送和从队列接收时，任务优先级会有什么样的影响
+	2、队列的特性
+		1、数据存储
+			1、队列可以保存有限个具有确定长度的数据单元，队列可以保存的最大单元数目称为队列深度
+			2、队列通常作为FIFO使用，尾进头出（头进尾出也可以）
+			3、写队列：把数据拷贝至队列中--读队列：从队列拷贝数据并删除
+		2、可被多任务读取
+			队列是具有自己独立权限的内核对象，并不属于或赋予任何任务。所有任务都可以向
+			同一队列写入或读出。一个队列由多方写入时经常的事，但由多方读出倒是很少
+		3、读队列时阻塞
+			1、可以设置阻塞读，当阻塞时间到了，没数据也会进入就绪状态
+			2、多个任务阻塞读时，优先级最高的先读，然后进入就绪状态，同优先级的阻塞时间
+			最长的解除阻塞
+		4、写队列阻塞
+	3、使用队列
+		1、队列由声明为xQueueHandle的变量进行引用，xQueueCreate()用于创建一个队列，并返回
+		一个xQueueHandle句柄以便于对其创建的队列进行引用
+		2、xQueueHandle xQueueCreate( unsigned portBASE_TYPE uxQueueLength,
+										unsigned portBASE_TYPE uxItemSize );
+			功能：创建队列，从堆中分配空间用于存储队列结构体本身以及队列中包含的数据单元
+			@1：队列能够存储的最大单元数，即队列深度
+			@2：队列中数据单元的长度，以字节为单位
+			返回值：NULL（没有足够空间）
+					非NULL（成功）
+		3、xQueueSendToBack()与 xQueueSendToFront()分别是将数据发送到队列尾和队列首
+			备注：不要在中断服务例程中调用xQueueSendToBack()与 xQueueSendToFront()，
+			系统提供中断安全版本的xQueueSendToFrontFromISR()与xQueueSendToBackFromISR()
+			portBASE_TYPE xQueueSendToFront( xQueueHandle xQueue,
+										const void * pvItemToQueue,
+										portTickType xTicksToWait );
+			portBASE_TYPE xQueueSendToBack( xQueueHandle xQueue,
+										const void * pvItemToQueue,
+										portTickType xTicksToWait );
+			@1：队列句柄
+			@2：发送数据的指针
+			@3：阻塞超时时间
+		3、xQueueReceive()与 xQueuePeek()
+			1、xQueueReceive()读并删除读取的数据从队列中
+			2、xQueuePeek()从队列首部读取数据，但是并不删除
+		4、unsigned portBASE_TYPE uxQueueMessagesWaiting( xQueueHandle xQueue );
+			查询队列中当前有效数据单元的个数
+	
+3、中断管理
+	1、概览
+		只有以”FromISR”或”FROM_ISR”结束的API函数或宏才可以在中断服务历程中
+		
+		目的：
+			1、哪些FreeRTOS的API函数可以在中断服务例程中使用
+			2、延迟中断方案是如何实现的
+			3、如何创建和使用二值信号量以及计数信号量
+			4、二值信号量和计数信号量之间的区别
+			5、如何利用队列在中断服务例程中把数据传入传出
+			6、一些FreeRTOS移植中采用的中断嵌套模型
+	2、延迟中断处理
+		1、采用二值信号量同步
+			1、二值信号量可以在某个特殊的中断发生时，让任务解除阻塞，相当于让任务与中断同步
+			这样就可以让中断事件处理量大的工作在同步任务中完成，中断服务例程（ISR）中只是
+			快速处理少部分工作。因此，中断可以说是被推迟（deferered）到一个处理（handler）
+			任务。
+			2、如果某个中断处理要求特别紧急，其延迟处理任务的优先级可以设为最高	
+			3、	延迟处理任务调用xSemaphoreTake()时，等效于带阻塞时间地读取队列，如果队列为空的话任务则进入
+				阻塞态。当事件发生后， ISR 简单地通过调用 xSemaphoreGiveFromISR()放置一个令
+				牌(信号量)到队列中，使得队列成为满状态。这也使得延迟处理任务切出阻塞态，并移
+				除令牌，使得队列再次成为空。当任务完成处理后，再次读取队列，发现队列为空，又
+				进入阻塞态，等待下一次事件发生。
+			4、FreeRTOS 中各种信号量的句柄都存储在 xSemaphoreHandle 类型的变量中。
+				void vSemaphoreCreateBinary( xSemaphoreHandle xSemaphore );
+					@1：创建的信号量
+					注意：需要说明的是 vSemaphoreCreateBinary()在实现上是一个宏，所以
+					  信号量变量应当直接传入，而不是传址。
+				portBASE_TYPE xSemaphoreTake( xSemaphoreHandle xSemaphore, 
+												portTickType xTicksToWait );
+					功能：带走一个信号量（P操作），除互斥信号量外，所有类型的信号量都可以
+						调用xSemaphoreTake()来获取，但不能在中断例程中调用
+					@1：获取到的信号量，信号量在使用前必须先定义	
+					@2：阻塞超时时间
+					返回值：
+					1、pdPASS：返回成功
+					2、pdFLASE：未获得信号量
+				portBASE_TYPE xSemaphoreGiveFromISR( xSemaphoreHandle xSemaphore,
+													portBASE_TYPE *pxHigherPriorityTaskWoken );
+					功能：除互斥信号量外，FreeRTOS支持的其它类型的信号量都可以调用xSemaphoreGiveFromISR()给出
+						  专门用于中断例程中
+					@1：给出信号量，信号量为定义为 xSemaphoreHandle类型的变量引用，在使用前必须先定义
+					@2：调用xSemaphoreGiveFromISR()会让信号量变为有效，会解除一个正在阻塞的任务
+						，如果这个任务的优先级高于当前被中断的任务，xSemaphoreGiveFromISR()会在
+						函数内部将*pxHigherPriorityTaskWoken设为pdTRUE
+						如果xSemaphoreGiveFromISR()将这个值设为pdTRUE，则在中断退出前应该进行一次上下文
+						切换。这样才能保证中断直接返回到就任务中优先级最高的任务中。
+					返回值：
+					1、pdPASS
+					2、pdFAIL:信号量已经有效，无法给出（相当于队列中已经有值，不能再加值进去）
+	3、计数信号量					
+		1、出现原因
+			二值信号量只能锁存一个事件，如果中断产生的频率过快，中断延迟任务还没来得及处理，就有可能
+			导致中断丢失
+		2、计数信号量的两种典型用法
+			1、时间计数
+				用于计数的计数信号量，在被创建时其计数值被初始化为0
+			2、资源管理
+				在这种用法中，信号量的计数值用于表示可用资源数目。一个任务要获取资源的控制权，
+				其必须先获得信号量（使信号量的计数值减1），当计数值减至0，则表示没有资源可用，
+				当任务利用资源完成工作后，将归还信号量（信号量的计数值+1）
+				用于资源管理的信号量，在创建时将其数值初始化为可用资源总数
+		3、	xSemaphoreHandle xSemaphoreCreateCounting( unsigned portBASE_TYPE uxMaxCount,
+													unsigned portBASE_TYPE uxInitialCount );
+			功能：创建计数信号量
+			@1：最大计数值
+				理解为队列的话，代表队列的最大深度
+				理解为事件计数或事件锁存的话，代表锁存事件的最大数目
+				对一组资源的访问进行管理的话，设为所有可用资源的总是
+			@2：信号量的初始计数值
+				事件计数：设置为0，因为还没有事件发生
+				资源管理：设置为@1，因为信号量创建时，所有的资源都是可用的
+			返回值：
+				NULL：失败，内存不足
+				非NULL：成功，返回句柄
+	4、在中断服务例程中使用队列
+		1、portBASE_TYPE xQueueSendToFrontFromISR( xQueueHandle xQueue,
+													void *pvItemToQueue，
+													portBASE_TYPE *pxHigherPriorityTaskWoken );
+			portBASE_TYPE xQueueSendToBackFromISR( xQueueHandle xQueue,
+													void *pvItemToQueue，
+													portBASE_TYPE *pxHigherPriorityTaskWoken
+													);						
+			注：xQueueSendFromISR()完全等同于 xQueueSendToBackFromISR()。	
+			@1：目标队列的句柄，这个句柄是调用xQueueCreate()创建该队列时的返回值
+			@2：发送数据的指针。其指向将要复制到目标队列中的数据单元。
+			@3：
+			返回值：
+			1、pdPASS：数据成功发送至队列
+			2、errQUEUE_FULL：队列已满
+	5、中断嵌套
+		1、中断嵌套需要在FreeRTOSConfig.h中定义两个常量
+			configKERNEL_INTERRUPT_PRIORITY：设置系统心跳时钟的中断优先级
+			configMAX_SYSCALL_INTERRUPT_PRIORITY：设置中断安全版本FreeRTOS API 可以运行的最高中断优先级
+			建立一个全面的中断嵌套模型需要设置 configMAX_SYSCALL_INTERRUPT_PRIRITY为比 configKERNEL_INTERRUPT_PRIORITY 更高的优先级	
+				
+	ARM Crotex M3用户提示
+		优先级高的数值低，千万不要指定0号优先级，因为这将会使得这个中断在系统中拥有最高优先级，
+		如果高于configMAX_SYSCALL_INTERRUPT_PRIRITY，将很可能导致系统奔溃
+		Cortex M3 内核的最低优先级为 255，但是不同的 Cortex M3 处理器厂商实现的优
+		先级位数不尽相同，而各自的配套库函数也使用了不同的方式来支持中断优先级。	
+
+4、资源管理		
+	1、概览
+		如果一个函数除了访问自己栈空间上分配的数据或内核寄存器的数据外，不会访问其他任何数据，则
+		这个函数是可重入的
+		
+		内容：
+			1、为什么，以及在什么时候有必要进行资源管理与控制
+			2、什么是临界区
+			3、互斥是什么意思
+			4、挂起调度器有什么意义
+			5、如何使用互斥量
+			6、如何创建与使用守护任务
+			7、什么是优先级反转，以及优先级继承是如何减小（但不是消除）其影响的
+	2、临界区与挂起调度器
+		1、基本临界区
+			1、基本临界区是指宏taskENTER_CRITICAL()与 taskEXIT_CRITICAL()之间的代码区间
+			2、临界区的工作仅仅是简单地把中断全部关掉，或关掉优先级在configMAX_SYSCAL_INTERRUPT_PRIORITY 及
+			以下的中断——依赖于具体使用的 FreeRTOS 移植。
+			3、临界区必须具有很短的时间，否则会反过来影响中断响应时间
+			4、临界区可以嵌套，内核维护一个嵌套深度，只有嵌套深度为0 时才会真正退出
+		2、挂起（锁定）调度器
+			1、void vTaskSuspendAll( void )；
+			2、挂起调度器可以停止上下文切换而不用关中断，如果某个中断在挂起调度器过程中要求上下文切换
+			那么这个请求也会被挂起，直到调度器被唤醒后才会得到执行
+			3、****：在调度器挂起状态时，不能调用FreeRTOS API函数
+			4、portBASE_TYPE xTaskResumeAll( void );
+				返回值：如果一个挂起的上下文切换请求在xTaskResumeAll()返回前得到执行，则函数返回
+				pdTRUE，否则返回pdFALSE
+			5、嵌套调用 vTaskSuspendAll()和 xTaskResumeAll()是安全的，因为内核有维护一个嵌套深度
+			计数，调度器只会在嵌套深度为0时才被唤醒
+	3、互斥量（二值信号量）
+		1、互斥量是一种特殊的二值信号量，用于控制在两个或多个任务减访问共享资源，MUTEX
+		2、用于互斥的信号量必须归还
+		   用于同步的信号量通常是完成同步之后便丢弃，不再归还
+		3、创建互斥信号量（FreeRTOS中所有种类的信号量句柄都保存在xSemaphoreHandle变量中）
+			xSemaphoreHandle xSemaphoreCreateMutex( void )
+			返回值：NULL（失败：内存堆空间不足），否则成功（返回值作为该互斥量的句柄）
+	4、守护任务
+		1、守护任务提供了一种干净利落的方法来实现互斥功能，而不用担心会发生优先级反转和死锁
+		2、守护任务是对某个资源具有唯一所有权的任务，只有守护任务才可以直接访问其守护的资源，
+			其他任务要访问该资源只能间接的通过守护任务提供的服务
+		3、心跳钩子函数：有内核每次心跳中断时调用，需要配置
+			设置 FreeRTOSConfig.h 中的常量 configUSE_TICK_HOOK 为 1。
+			提供钩子函数的具体实现	
+			void vApplicationTickHook( void );	
+			心跳钩子函数在系统中断上下文上执行，所以必须保证非常短小，适度占用栈空间，并且不要调用不带	后缀”FromISR”的 FreeRTOS API 函数
+
+5、内存管理	
+	1、概览
+		在小型嵌入式系统中，通常是启动调度器之前创建任务、队列和信号量
+		目的：
+			FreeRTOS在什么时候分配内存
+			FreeRTOS提供的三种内存分配方案范例
+6、排错
+	1、栈溢出
+		unsigned portBASE_TYPE uxTaskGetStackHighWaterMark( xTaskHandle xTask );
+			功能：查询指定任务在运行中，其栈空间还差多少就要溢出
+			@1：被查询任务的句柄，传入NULL，查询本任务自身栈空间的高水线
+			返回值：返回从任务启动执行开始的运行历史中，栈空间具有的最小剩余量				
+		void vApplicationStackOverflowHook( xTaskHandle *pxTask, signed portCHAR *pcTaskName );		
+			功能：溢出钩子函数，在任务栈溢出时调用
+			注意：栈溢出钩子函数可以在中断上下文调用	
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+		
+			
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	

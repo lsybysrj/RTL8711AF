@@ -1,0 +1,13 @@
+备注：将要选择的功能从条件编译处打开
+
+
+1、打开（D:\浩思\doc\00004425-sdk-ameba1-v3.4a\sdk-ameba1-v3.4a\project\realtek_ameba1_va0_example\EWARM-RELEASE）
+	路径下面的Project.eww工程
+2、在IAR中右键Project-Debug，打开option选项，将Debugger调成CMSIS_DAP驱动模式，可以使用minicom烧录
+	工程至板子
+3、右键Project-Debug，build all将编译整个工程
+4、project-->download-->download active application可以将整个工作空间下载到开发板
+	1、此过程下载的是Debug目录下面的application.axf文件，其余的bin文件不会被下载进去	
+	2、axf也是可执行文件
+	3、download-->erase merrory：擦除下载到开发板的工程
+		download-->download file：至下载文件至开发板
